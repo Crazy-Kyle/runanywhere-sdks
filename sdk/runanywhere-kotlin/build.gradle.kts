@@ -52,7 +52,7 @@ val resolvedVersion =
     System.getenv("SDK_VERSION")?.removePrefix("v")
         ?: System.getenv("VERSION")?.removePrefix("v")
         ?: "0.1.5-SNAPSHOT"
-version = resolvedVersion
+version = "0.1.5"
 
 logger.lifecycle("RunAnywhere SDK version: $resolvedVersion (JitPack=$isJitPack)")
 

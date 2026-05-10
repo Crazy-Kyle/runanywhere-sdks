@@ -186,16 +186,28 @@ object CppBridge {
             }
 
             // Register device callbacks (sets up JNI callbacks for C++ to call)
-            CppBridgeDevice.register()
+            if (_nativeLibraryLoaded) {
+                CppBridgeDevice.register()
+            } else {
+                logger.warn("Skipping native device callbacks because the desktop native runtime is unavailable")
+            }
 
             // Initialize SDK config with version, platform, and auth info
             // This is REQUIRED for device registration to use the correct sdk_version
             // Mirrors Swift SDK's rac_sdk_init() call in CppBridge+State.swift
-            initializeSdkConfig(environment, apiKey, baseURL)
+            if (_nativeLibraryLoaded) {
+                initializeSdkConfig(environment, apiKey, baseURL)
+            } else {
+                logger.warn("Skipping native SDK config because the desktop native runtime is unavailable")
+            }
 
             // Initialize telemetry manager with device info
             // This creates the C++ telemetry manager and sets up HTTP callback
-            initializeTelemetryManager(environment)
+            if (_nativeLibraryLoaded) {
+                initializeTelemetryManager(environment)
+            } else {
+                logger.warn("Skipping native telemetry manager because the desktop native runtime is unavailable")
+            }
 
             // Register analytics events callback AFTER telemetry manager is initialized
             // This routes C++ events (LLM/STT/TTS) to telemetry for batching and HTTP transport
@@ -209,13 +221,19 @@ object CppBridge {
             }
 
             // Register file manager I/O callbacks for C++ file management
-            CppBridgeFileManager.register()
+            if (_nativeLibraryLoaded) {
+                CppBridgeFileManager.register()
+            } else {
+                logger.warn("Skipping native file manager callbacks because the desktop native runtime is unavailable")
+            }
 
             _isInitialized = true
 
             // Emit SDK init completed event with duration
             val initDurationMs = System.currentTimeMillis() - initStartTime
-            CppBridgeEvents.emitSDKInitCompleted(initDurationMs.toDouble())
+            if (_nativeLibraryLoaded) {
+                CppBridgeEvents.emitSDKInitCompleted(initDurationMs.toDouble())
+            }
             logger.info("✅ Phase 1 complete in ${initDurationMs}ms (${environment.name})")
         }
     }

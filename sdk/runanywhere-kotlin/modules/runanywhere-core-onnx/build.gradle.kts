@@ -282,9 +282,7 @@ group =
         else -> "io.github.sanchitmonga22"
     }
 
-version = System.getenv("SDK_VERSION")?.removePrefix("v")
-    ?: System.getenv("VERSION")?.removePrefix("v")
-    ?: "0.1.5-SNAPSHOT"
+version = "0.1.5"
 
 val mavenCentralUsername: String? =
     System.getenv("MAVEN_CENTRAL_USERNAME")
