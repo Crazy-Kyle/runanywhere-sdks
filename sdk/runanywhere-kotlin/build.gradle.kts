@@ -1,3 +1,9 @@
+import com.runanywhere.sdk.gradle.BuildDesktopNativeRuntimeTask
+import com.runanywhere.sdk.gradle.PrintDesktopNativeRuntimeStatusTask
+import com.runanywhere.sdk.gradle.VerifyDesktopNativeRuntimeTask
+import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.jvm.tasks.Jar
+
 // Clean Gradle script for KMP SDK
 
 plugins {
@@ -94,6 +100,27 @@ val nativeLibVersion: String =
     rootProject.findProperty("runanywhere.nativeLibVersion")?.toString()
         ?: project.findProperty("runanywhere.nativeLibVersion")?.toString()
         ?: resolvedVersion // Default to SDK version
+
+val desktopNativePlatformName: String = when {
+    System.getProperty("os.name").lowercase().contains("mac") && System.getProperty("os.arch").lowercase() in listOf("aarch64", "arm64") -> "macos-aarch64"
+    System.getProperty("os.name").lowercase().contains("mac") -> "macos-x64"
+    System.getProperty("os.name").lowercase().contains("win") -> "windows-x64"
+    System.getProperty("os.name").lowercase().contains("linux") -> "linux-x64"
+    else -> "unsupported-${System.getProperty("os.arch").lowercase()}"
+}
+val desktopNativeBuildDir = layout.buildDirectory.dir("desktop-native-build/$desktopNativePlatformName")
+val desktopNativeOutputDir = layout.buildDirectory.dir("desktop-native/$desktopNativePlatformName")
+val desktopNativeConfiguredCmakeExecutable: String =
+    (rootProject.findProperty("runanywhere.cmakeExecutable") ?: project.findProperty("runanywhere.cmakeExecutable"))
+        ?.toString()
+        ?.takeIf { value: String -> value.isNotBlank() }
+        ?: System.getenv("CMAKE")?.takeIf { value: String -> value.isNotBlank() }
+        ?: listOf(
+            "/opt/homebrew/bin/cmake",
+            "/usr/local/bin/cmake",
+            "/usr/bin/cmake",
+        ).firstOrNull { path: String -> file(path).canExecute() }
+        ?: "cmake"
 
 logger.lifecycle("RunAnywhere SDK: testLocal=$testLocal, nativeLibVersion=$nativeLibVersion")
 
@@ -566,7 +593,70 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     }
 }
 
-// Bundle third-party licenses in JVM JAR
+// Desktop native runtime resources and diagnostics.
+val desktopNativePlatforms: Map<String, List<String>> = mapOf(
+    "macos-aarch64" to listOf("librac_commons.dylib", "librunanywhere_jni.dylib"),
+    "macos-x64" to listOf("librac_commons.dylib", "librunanywhere_jni.dylib"),
+    "windows-x64" to listOf("rac_commons.dll", "runanywhere_jni.dll"),
+    "linux-x64" to listOf("librac_commons.so", "librunanywhere_jni.so"),
+)
+
+tasks.register<BuildDesktopNativeRuntimeTask>("buildDesktopNativeRuntime") {
+    group = "runanywhere"
+    description = "Build and stage desktop RunAnywhere commons JNI runtime artifacts for this host"
+    commonsDir.set(layout.projectDirectory.dir("../runanywhere-commons"))
+    platformName.set(desktopNativePlatformName)
+    cmakeExecutable.set(desktopNativeConfiguredCmakeExecutable)
+    requiredLibraries.set(desktopNativePlatforms[desktopNativePlatformName].orEmpty())
+    jniLibraries.set(listOf("librunanywhere_jni.dylib", "librunanywhere_jni.so", "runanywhere_jni.dll"))
+    nativeBuildDir.set(desktopNativeBuildDir)
+    nativeOutputDir.set(desktopNativeOutputDir)
+}
+
+tasks.register<Copy>("prepareDesktopNativeRuntime") {
+    group = "runanywhere"
+    description = "Copy desktop RunAnywhere native runtime artifacts into JVM resources"
+    from(layout.buildDirectory.dir("desktop-native"))
+    into(layout.projectDirectory.dir("src/jvmMain/resources/runanywhere-native"))
+}
+
+tasks.register<PrintDesktopNativeRuntimeStatusTask>("printDesktopNativeRuntimeStatus") {
+    group = "runanywhere"
+    description = "Print desktop RunAnywhere native runtime artifact status"
+    dependsOn("prepareDesktopNativeRuntime")
+    nativeResourceDir.set(layout.projectDirectory.dir("src/jvmMain/resources/runanywhere-native"))
+    platformNames.set(desktopNativePlatforms.keys.toList())
+    macOsLibraries.set(listOf("librac_commons.dylib", "librunanywhere_jni.dylib"))
+    windowsLibraries.set(listOf("rac_commons.dll", "runanywhere_jni.dll"))
+    linuxLibraries.set(listOf("librac_commons.so", "librunanywhere_jni.so"))
+}
+
+tasks.register<VerifyDesktopNativeRuntimeTask>("verifyDesktopNativeRuntime") {
+    group = "runanywhere"
+    description = "Verify desktop RunAnywhere native runtime artifacts for release packaging"
+    dependsOn("prepareDesktopNativeRuntime")
+    nativeResourceDir.set(layout.projectDirectory.dir("src/jvmMain/resources/runanywhere-native"))
+    platformNames.set(desktopNativePlatforms.keys.toList())
+    macOsLibraries.set(listOf("librac_commons.dylib", "librunanywhere_jni.dylib"))
+    windowsLibraries.set(listOf("rac_commons.dll", "runanywhere_jni.dll"))
+    linuxLibraries.set(listOf("librac_commons.so", "librunanywhere_jni.so"))
+    platformName.set(desktopNativePlatformName)
+    verifyAllTargets.set(
+        (rootProject.findProperty("runanywhere.verifyAllDesktopNatives") ?: project.findProperty("runanywhere.verifyAllDesktopNatives"))
+            ?.toString()
+            ?.toBoolean()
+            ?: false,
+    )
+}
+
+tasks.named<Jar>("jvmJar") {
+    dependsOn("buildDesktopNativeRuntime")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(layout.buildDirectory.dir("desktop-native")) {
+        into("runanywhere-native")
+    }
+}
+
 tasks.named<Jar>("jvmJar") {
     from(rootProject.file("THIRD_PARTY_LICENSES.md")) {
         into("META-INF")

@@ -14,6 +14,8 @@
 
 package com.runanywhere.sdk.native.bridge
 
+import com.runanywhere.sdk.desktop.RunAnywhereDesktopNativeLoadResult
+import com.runanywhere.sdk.desktop.RunAnywhereDesktopNativeLoader
 import com.runanywhere.sdk.foundation.SDKLogger
 
 /**
@@ -47,20 +49,16 @@ object RunAnywhereBridge {
         synchronized(loadLock) {
             if (nativeLibraryLoaded) return true
 
-            logger.info("Loading native library 'runanywhere_jni'...")
+            logger.info("Loading RunAnywhere desktop native runtime...")
 
-            try {
-                System.loadLibrary("runanywhere_jni")
+            val loadResult: RunAnywhereDesktopNativeLoadResult = RunAnywhereDesktopNativeLoader().load()
+            if (loadResult.isLoaded) {
                 nativeLibraryLoaded = true
-                logger.info("✅ Native library loaded successfully")
+                logger.info("✅ Native library loaded successfully: ${loadResult.describe()}")
                 return true
-            } catch (e: UnsatisfiedLinkError) {
-                logger.error("❌ Failed to load native library: ${e.message}", throwable = e)
-                return false
-            } catch (e: Exception) {
-                logger.error("❌ Unexpected error: ${e.message}", throwable = e)
-                return false
             }
+            logger.error("❌ Failed to load native library: ${loadResult.describe()}")
+            return false
         }
     }
 
