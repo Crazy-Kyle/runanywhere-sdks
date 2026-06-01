@@ -60,7 +60,13 @@ abstract class BuildDesktopNativeRuntimeTask @Inject constructor(
                 "-DCMAKE_BUILD_TYPE=Release",
                 "-DRAC_BUILD_SHARED=ON",
                 "-DRAC_BUILD_JNI=ON",
-                "-DRAC_BUILD_BACKENDS=OFF",
+                "-DRAC_BUILD_BACKENDS=ON",
+                "-DRAC_BACKEND_LLAMACPP=ON",
+                "-DRAC_BACKEND_ONNX=OFF",
+                "-DRAC_BACKEND_RAG=OFF",
+                "-DRAC_BACKEND_WHISPERCPP=OFF",
+                "-DRAC_BACKEND_WHISPERKIT_COREML=OFF",
+                "-DRAC_BACKEND_METALRT=OFF",
                 "-DRAC_BUILD_PLATFORM=OFF",
                 "-DRAC_BUILD_TESTS=OFF",
             )
@@ -70,7 +76,7 @@ abstract class BuildDesktopNativeRuntimeTask @Inject constructor(
                 cmakeExecutable.get(),
                 "--build", buildDirectory.absolutePath,
                 "--config", "Release",
-                "--target", "rac_commons", "runanywhere_commons_jni",
+                "--target", "rac_commons", "runanywhere_commons_jni", "rac_backend_llamacpp", "rac_backend_llamacpp_jni",
             )
         }
         copyBuiltLibraries(buildDirectory, outputDirectory)
@@ -97,6 +103,7 @@ abstract class BuildDesktopNativeRuntimeTask @Inject constructor(
         val candidates: List<File> = listOf(
             buildDirectory.resolve(libraryName),
             buildDirectory.resolve("src/jni").resolve(libraryName),
+            buildDirectory.resolve("src/backends/llamacpp").resolve(libraryName),
         )
         return candidates.firstOrNull { candidate: File -> candidate.isFile }
             ?: throw GradleException("CMake build did not produce $libraryName in ${candidates.joinToString { it.parentFile.absolutePath }}")

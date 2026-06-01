@@ -266,12 +266,15 @@ elseif(RAC_PLATFORM_WINDOWS)
 endif()
 
 # =============================================================================
-# JNI TARGET (Android)
+# JNI TARGET (Android/JVM desktop)
 # =============================================================================
 
-if(RAC_PLATFORM_ANDROID AND RAC_BUILD_SHARED)
-    if(ANDROID)
-        message(STATUS "Building LlamaCPP JNI bridge for Android")
+if(RAC_BUILD_JNI AND RAC_BUILD_SHARED)
+        if(ANDROID)
+            message(STATUS "Building LlamaCPP JNI bridge for Android")
+        else()
+            message(STATUS "Building LlamaCPP JNI bridge for JVM desktop")
+        endif()
 
         add_library(rac_backend_llamacpp_jni SHARED
             jni/rac_backend_llamacpp_jni.cpp
@@ -280,17 +283,20 @@ if(RAC_PLATFORM_ANDROID AND RAC_BUILD_SHARED)
         target_include_directories(rac_backend_llamacpp_jni PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
             ${RAC_COMMONS_ROOT_DIR}/include
+            ${JNI_INCLUDE_DIRS}
         )
 
         target_link_libraries(rac_backend_llamacpp_jni PRIVATE
             rac_backend_llamacpp
-            log
+            ${JNI_LIBRARIES}
         )
 
-        target_compile_options(rac_backend_llamacpp_jni PRIVATE -O3 -fvisibility=hidden -ffunction-sections -fdata-sections)
-        # 16KB page alignment for Android 15+ (API 35) compliance - required Nov 2025
-        target_link_options(rac_backend_llamacpp_jni PRIVATE -Wl,--gc-sections -Wl,-z,max-page-size=16384)
-    endif()
+        if(ANDROID)
+            target_link_libraries(rac_backend_llamacpp_jni PRIVATE log)
+            target_compile_options(rac_backend_llamacpp_jni PRIVATE -O3 -fvisibility=hidden -ffunction-sections -fdata-sections)
+            # 16KB page alignment for Android 15+ (API 35) compliance - required Nov 2025
+            target_link_options(rac_backend_llamacpp_jni PRIVATE -Wl,--gc-sections -Wl,-z,max-page-size=16384)
+        endif()
 endif()
 
 # =============================================================================

@@ -14,6 +14,7 @@ import com.runanywhere.sdk.data.transform.IncompleteBytesToStringBuffer
 import com.runanywhere.sdk.foundation.bridge.CppBridge
 import com.runanywhere.sdk.foundation.errors.SDKError
 import com.runanywhere.sdk.native.bridge.RunAnywhereBridge
+import java.io.File
 
 /**
  * LLM bridge that provides Large Language Model component lifecycle management for C++ core.
@@ -159,6 +160,28 @@ object CppBridgeLLM {
      * Tag for logging.
      */
     private const val TAG = "CppBridgeLLM"
+
+private const val RUNANYWHERE_DEBUG_LOG_PATH: String = "/Users/kevin/Documents/github/AiEverywhere/.cursor/debug-aef429.log"
+
+private fun writeRunanywhereDebugLog(
+    runId: String,
+    hypothesisId: String,
+    location: String,
+    message: String,
+    data: Map<String, Any?>,
+) {
+    val escapedData: String = data.entries.joinToString(",") { (key: String, value: Any?) ->
+        val encodedValue: String = when (value) {
+            null -> "null"
+            is Number, is Boolean -> value.toString()
+            else -> "\"${value.toString().replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        }
+        "\"$key\":$encodedValue"
+    }
+    val timestamp: Long = System.currentTimeMillis()
+    val line: String = "{\"sessionId\":\"aef429\",\"runId\":\"$runId\",\"hypothesisId\":\"$hypothesisId\",\"location\":\"$location\",\"message\":\"$message\",\"data\":{$escapedData},\"timestamp\":$timestamp}\n"
+    runCatching { File(RUNANYWHERE_DEBUG_LOG_PATH).appendText(line) }
+}
 
     /**
      * Check if native LLM library is available.
@@ -748,16 +771,66 @@ object CppBridgeLLM {
 
         try {
             val byteStreamDecoder = IncompleteBytesToStringBuffer()
+            var debugTokenCount: Int = 0
             // Use the new callback-based streaming JNI method
             // This calls back to Kotlin for each token in real-time
+            // region agent log
+            writeRunanywhereDebugLog(
+                runId = "pre-fix-display",
+                hypothesisId = "H1,H4,H5",
+                location = "CppBridgeLLM.kt:generateStream:beforeJni",
+                message = "Before JNI streaming generation",
+                data = mapOf(
+                    "state" to LLMState.getName(state),
+                    "handleSet" to (currentHandle != 0L),
+                    "loadedModelIdHash" to loadedModelId.hashCode(),
+                    "loadedModelPathSet" to !loadedModelPath.isNullOrBlank(),
+                    "configLength" to config.toJson().length,
+                    "promptLength" to prompt.length,
+                ),
+            )
+            // endregion
             val jniCallback =
                 RunAnywhereBridge.TokenCallback { tokenBytes ->
                     try {
-                        val text = byteStreamDecoder.push(tokenBytes)
+                        val text = byteStreamDecoder.push(tokenBytes).replace("\uFFFD", "")
+                        debugTokenCount += 1
+                        if (debugTokenCount <= 20 || text.contains('\uFFFD')) {
+                            // region agent log
+                            writeRunanywhereDebugLog(
+                                runId = "pre-fix-display",
+                                hypothesisId = "H1,H2,H3",
+                                location = "CppBridgeLLM.kt:generateStream:onToken",
+                                message = "Decoded native stream token",
+                                data = mapOf(
+                                    "tokenIndex" to debugTokenCount,
+                                    "rawBytes" to tokenBytes.size,
+                                    "decodedLength" to text.length,
+                                    "decodedHash" to text.hashCode(),
+                                    "hasReplacementChar" to text.contains('\uFFFD'),
+                                    "looksLikeJson" to (text.trimStart().startsWith("{") || text.trimStart().startsWith("[")),
+                                ),
+                            )
+                            // endregion
+                        }
                         // Forward each token to the user's callback
                         if (text.isNotEmpty()) callback.onToken(text)
                         true
                     } catch (e: Exception) {
+                        // region agent log
+                        writeRunanywhereDebugLog(
+                            runId = "pre-fix-display",
+                            hypothesisId = "H1",
+                            location = "CppBridgeLLM.kt:generateStream:onTokenError",
+                            message = "Native token decode or callback failed",
+                            data = mapOf(
+                                "tokenIndex" to debugTokenCount,
+                                "rawBytes" to tokenBytes.size,
+                                "errorType" to e::class.simpleName,
+                                "errorMessageHash" to e.message.hashCode(),
+                            ),
+                        )
+                        // endregion
                         CppBridgePlatformAdapter.logCallback(
                             CppBridgePlatformAdapter.LogLevel.WARN,
                             TAG,
@@ -778,13 +851,55 @@ object CppBridgeLLM {
 
             try {
                 // when stream ends:
-                val tail = byteStreamDecoder.finish()
+                val tail = byteStreamDecoder.finish().replace("\uFFFD", "")
                 if (tail.isNotEmpty()) callback.onToken(tail)
-            } catch (_: Exception) {
+                // region agent log
+                writeRunanywhereDebugLog(
+                    runId = "pre-fix-display",
+                    hypothesisId = "H1",
+                    location = "CppBridgeLLM.kt:generateStream:decoderFinish",
+                    message = "Finished UTF-8 stream decoder",
+                    data = mapOf(
+                        "tailLength" to tail.length,
+                        "tailHash" to tail.hashCode(),
+                        "tailHasReplacementChar" to tail.contains('\uFFFD'),
+                    ),
+                )
+                // endregion
+            } catch (e: Exception) {
+                // region agent log
+                writeRunanywhereDebugLog(
+                    runId = "pre-fix-display",
+                    hypothesisId = "H1",
+                    location = "CppBridgeLLM.kt:generateStream:decoderFinishError",
+                    message = "UTF-8 decoder finish failed",
+                    data = mapOf(
+                        "errorType" to e::class.simpleName,
+                        "errorMessageHash" to e.message.hashCode(),
+                    ),
+                )
+                // endregion
                 // Finish may fail if stream was interrupted; safe to ignore
             }
 
             val result = parseGenerationResult(resultJson, System.currentTimeMillis() - startTime)
+            // region agent log
+            writeRunanywhereDebugLog(
+                runId = "pre-fix-display",
+                hypothesisId = "H2,H3,H5",
+                location = "CppBridgeLLM.kt:generateStream:afterResult",
+                message = "Parsed final streaming result",
+                data = mapOf(
+                    "tokenCount" to debugTokenCount,
+                    "resultJsonLength" to resultJson.length,
+                    "resultJsonLooksLikeJson" to resultJson.trimStart().startsWith("{"),
+                    "tokensGenerated" to result.tokensGenerated,
+                    "resultTextLength" to result.text.length,
+                    "resultTextHash" to result.text.hashCode(),
+                    "resultHasReplacementChar" to result.text.contains('\uFFFD'),
+                ),
+            )
+            // endregion
 
             synchronized(lock) {
                 setState(LLMState.READY)

@@ -66,6 +66,24 @@ static const char* JNI_LOG_TAG = "JNI.Commons";
 #define LOGw(...) RAC_LOG_WARNING(JNI_LOG_TAG, __VA_ARGS__)
 #define LOGd(...) RAC_LOG_DEBUG(JNI_LOG_TAG, __VA_ARGS__)
 
+static std::string dumpJsonReplacingInvalidUtf8(const nlohmann::json& json) {
+    return json.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+}
+
+static std::string sanitizeUtf8StringReplacingInvalidUtf8(const char* value) {
+    if (!value) {
+        return "";
+    }
+    nlohmann::json json_string = std::string(value);
+    const std::string sanitized_json = dumpJsonReplacingInvalidUtf8(json_string);
+    return nlohmann::json::parse(sanitized_json).get<std::string>();
+}
+
+static jstring newUtfStringOrEmpty(JNIEnv* env, const char* value) {
+    const std::string sanitized_value = sanitizeUtf8StringReplacingInvalidUtf8(value);
+    return env->NewStringUTF(sanitized_value.c_str());
+}
+
 // =============================================================================
 // Global State for Platform Adapter JNI Callbacks
 // =============================================================================
@@ -621,11 +639,11 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racLlmComponentGenerate
         json_obj["stop_reason"] = 0;  // 0 = normal completion
         json_obj["total_time_ms"] = result.total_time_ms;
         json_obj["tokens_per_second"] = result.tokens_per_second;
-        std::string json = json_obj.dump();
+        std::string json = dumpJsonReplacingInvalidUtf8(json_obj);
 
         LOGi("racLlmComponentGenerate returning JSON: %zu bytes", json.length());
 
-        jstring jResult = env->NewStringUTF(json.c_str());
+        jstring jResult = newUtfStringOrEmpty(env, json.c_str());
         rac_llm_result_free(&result);
         return jResult;
     }
@@ -770,7 +788,7 @@ static rac_bool_t llm_stream_callback_token(const char* token, void* user_data) 
                 continueGen = env->CallBooleanMethod(ctx->callback, ctx->onTokenMethod, jToken);
                 env->DeleteLocalRef(jToken);
             } else {
-                jstring jToken = env->NewStringUTF(token);
+                jstring jToken = newUtfStringOrEmpty(env, token);
                 continueGen = env->CallBooleanMethod(ctx->callback, ctx->onTokenMethod, jToken);
                 env->DeleteLocalRef(jToken);
             }
@@ -942,11 +960,11 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racLlmComponentGenerate
     json_obj["stop_reason"] = 0;  // 0 = normal completion
     json_obj["total_time_ms"] = ctx.final_result.total_time_ms;
     json_obj["tokens_per_second"] = ctx.final_result.tokens_per_second;
-    std::string json = json_obj.dump();
+    std::string json = dumpJsonReplacingInvalidUtf8(json_obj);
 
     LOGi("racLlmComponentGenerateStream returning JSON: %zu bytes", json.length());
 
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 // ========================================================================
@@ -1076,11 +1094,11 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racLlmComponentGenerate
     json_obj["stop_reason"] = 0;
     json_obj["total_time_ms"] = ctx.final_result.total_time_ms;
     json_obj["tokens_per_second"] = ctx.final_result.tokens_per_second;
-    std::string json = json_obj.dump();
+    std::string json = dumpJsonReplacingInvalidUtf8(json_obj);
 
     LOGi("racLlmComponentGenerateStreamWithCallback returning JSON: %zu bytes", json.length());
 
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 // ========================================================================
@@ -1255,7 +1273,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racLlmComponentGenerate
 
     LOGi("racLlmComponentGenerateStreamWithTiming returning JSON: %zu bytes", json.length());
 
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 JNIEXPORT void JNICALL
@@ -1382,7 +1400,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racLlmComponentGetLoraI
         return nullptr;
     }
 
-    jstring jresult = env->NewStringUTF(json);
+    jstring jresult = newUtfStringOrEmpty(env, json);
     rac_free(json);
     return jresult;
 }
@@ -1405,7 +1423,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racLlmComponentCheckLor
     }
     jstring jresult = nullptr;
     if (error) {
-        jresult = env->NewStringUTF(error);
+        jresult = newUtfStringOrEmpty(env, error);
         rac_free(error);
     } else {
         jresult = env->NewStringUTF("Incompatible LoRA adapter");
@@ -1554,7 +1572,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racLoraRegistryGetForMo
     }
     json += "]";
     rac_lora_entry_array_free(entries, count);
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 JNIEXPORT jstring JNICALL
@@ -1578,7 +1596,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racLoraRegistryGetAll(J
     }
     json += "]";
     rac_lora_entry_array_free(entries, count);
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 // =============================================================================
@@ -1714,12 +1732,12 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racSttComponentTranscri
     json_obj["duration_ms"] = result.processing_time_ms;
     json_obj["completion_reason"] = 1;  // END_OF_AUDIO
     json_obj["confidence"] = result.confidence;
-    std::string json_result = json_obj.dump();
+    std::string json_result = dumpJsonReplacingInvalidUtf8(json_obj);
 
     rac_stt_result_free(&result);
 
     LOGd("STT transcribe result: %s", json_result.c_str());
-    return env->NewStringUTF(json_result.c_str());
+    return newUtfStringOrEmpty(env, json_result.c_str());
 }
 
 JNIEXPORT jstring JNICALL
@@ -2349,7 +2367,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racModelRegistryGet(JNI
     std::string json = modelInfoToJson(model);
     rac_model_info_free(model);
 
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 JNIEXPORT jstring JNICALL
@@ -2380,7 +2398,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racModelRegistryGetAll(
 
     rac_model_info_array_free(models, count);
 
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 JNIEXPORT jstring JNICALL
@@ -2410,7 +2428,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racModelRegistryGetDown
 
     rac_model_info_array_free(models, count);
 
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 JNIEXPORT jint JNICALL
@@ -2668,7 +2686,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racModelAssignmentFetch
     }
 
     LOGi("racModelAssignmentFetch: returned %zu models", count);
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 // =============================================================================
@@ -3039,8 +3057,8 @@ static rac_result_t jni_device_http_post(const char* endpoint, const char* json_
         return RAC_ERROR_ADAPTER_NOT_SET;
     }
 
-    jstring jEndpoint = env->NewStringUTF(endpoint ? endpoint : "");
-    jstring jBody = env->NewStringUTF(json_body ? json_body : "");
+    jstring jEndpoint = newUtfStringOrEmpty(env, endpoint);
+    jstring jBody = newUtfStringOrEmpty(env, json_body);
 
     // Check for allocation failures (can throw OutOfMemoryError)
     if (env->ExceptionCheck() || !jEndpoint || !jBody) {
@@ -3208,8 +3226,8 @@ static void jni_telemetry_http_callback(void* user_data, const char* endpoint,
         return;
     }
 
-    jstring jEndpoint = env->NewStringUTF(endpoint ? endpoint : "");
-    jstring jBody = env->NewStringUTF(json_body ? json_body : "");
+    jstring jEndpoint = newUtfStringOrEmpty(env, endpoint);
+    jstring jBody = newUtfStringOrEmpty(env, json_body);
 
     // Check for NewStringUTF allocation failures
     if (!jEndpoint || !jBody) {
@@ -3221,9 +3239,12 @@ static void jni_telemetry_http_callback(void* user_data, const char* endpoint,
         return;
     }
 
+    const std::string sanitized_body = sanitizeUtf8StringReplacingInvalidUtf8(json_body);
+    const jint sanitized_body_length = static_cast<jint>(sanitized_body.length());
+
     env->CallVoidMethod(g_telemetry_jni_state.http_callback_obj,
                         g_telemetry_jni_state.http_callback_method, jEndpoint, jBody,
-                        static_cast<jint>(json_length),
+                        sanitized_body_length,
                         requires_auth == RAC_TRUE ? JNI_TRUE : JNI_FALSE);
 
     // Check for Java exception after CallVoidMethod
@@ -3848,7 +3869,7 @@ JNIEXPORT jstring JNICALL Java_com_runanywhere_sdk_native_bridge_RunAnywhereBrid
     json += "}";
 
     rac_tool_call_free(&result);
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 JNIEXPORT jstring JNICALL
@@ -3986,7 +4007,7 @@ static std::string buildVlmResultJson(const std::string& text, const rac_vlm_res
     j["image_encode_time_ms"] = result.image_encode_time_ms;
     j["total_time_ms"] = result.total_time_ms;
     j["tokens_per_second"] = result.tokens_per_second;
-    return j.dump();
+    return dumpJsonReplacingInvalidUtf8(j);
 }
 
 // Helper: Populate rac_vlm_image_t from JNI parameters
@@ -4181,7 +4202,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racVlmComponentProcess(
 
     LOGi("racVlmComponentProcess returning JSON: %zu bytes", json.length());
 
-    jstring jResult = env->NewStringUTF(json.c_str());
+    jstring jResult = newUtfStringOrEmpty(env, json.c_str());
     rac_vlm_result_free(&result);
     return jResult;
 }
@@ -4381,7 +4402,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racVlmComponentProcessS
 
     LOGi("racVlmComponentProcessStream returning JSON: %zu bytes", json.length());
 
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 JNIEXPORT jboolean JNICALL
@@ -4429,7 +4450,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_racVlmComponentGetMetri
     j["total_unloads"] = metrics.total_unloads;
     std::string json = j.dump();
 
-    return env->NewStringUTF(json.c_str());
+    return newUtfStringOrEmpty(env, json.c_str());
 }
 
 // =============================================================================
@@ -4808,7 +4829,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_nativeFileManagerCheckS
     rac_storage_availability_free(&availability);
 
     std::string jsonStr = j.dump();
-    return env->NewStringUTF(jsonStr.c_str());
+    return newUtfStringOrEmpty(env, jsonStr.c_str());
 }
 
 // Get storage info - returns JSON string with result
@@ -4831,7 +4852,7 @@ Java_com_runanywhere_sdk_native_bridge_RunAnywhereBridge_nativeFileManagerGetSto
     j["totalAppSize"] = info.total_app_size;
 
     std::string jsonStr = j.dump();
-    return env->NewStringUTF(jsonStr.c_str());
+    return newUtfStringOrEmpty(env, jsonStr.c_str());
 }
 
 }  // extern "C"

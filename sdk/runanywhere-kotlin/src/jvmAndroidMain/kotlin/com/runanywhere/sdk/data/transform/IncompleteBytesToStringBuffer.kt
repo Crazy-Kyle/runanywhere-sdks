@@ -3,12 +3,15 @@ package com.runanywhere.sdk.data.transform
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CoderResult
+import java.nio.charset.CodingErrorAction
 
 class IncompleteBytesToStringBuffer(
     initialByteCapacity: Int = 8 * 1024,
     private val charCapacity: Int = 8 * 1024,
 ) {
     private val decoder = Charsets.UTF_8.newDecoder()
+        .onMalformedInput(CodingErrorAction.REPLACE)
+        .onUnmappableCharacter(CodingErrorAction.REPLACE)
     private var inBuf: ByteBuffer = ByteBuffer.allocate(initialByteCapacity)
     private val outBuf: CharBuffer = CharBuffer.allocate(charCapacity)
 

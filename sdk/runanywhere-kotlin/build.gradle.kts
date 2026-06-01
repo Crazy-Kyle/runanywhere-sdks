@@ -595,10 +595,20 @@ tasks.matching { it.name == "preBuild" }.configureEach {
 
 // Desktop native runtime resources and diagnostics.
 val desktopNativePlatforms: Map<String, List<String>> = mapOf(
-    "macos-aarch64" to listOf("librac_commons.dylib", "librunanywhere_jni.dylib"),
-    "macos-x64" to listOf("librac_commons.dylib", "librunanywhere_jni.dylib"),
-    "windows-x64" to listOf("rac_commons.dll", "runanywhere_jni.dll"),
-    "linux-x64" to listOf("librac_commons.so", "librunanywhere_jni.so"),
+    "macos-aarch64" to listOf(
+        "librac_commons.dylib",
+        "librunanywhere_jni.dylib",
+        "librac_backend_llamacpp.dylib",
+        "librac_backend_llamacpp_jni.dylib",
+    ),
+    "macos-x64" to listOf(
+        "librac_commons.dylib",
+        "librunanywhere_jni.dylib",
+        "librac_backend_llamacpp.dylib",
+        "librac_backend_llamacpp_jni.dylib",
+    ),
+    "windows-x64" to listOf("rac_commons.dll", "runanywhere_jni.dll", "rac_backend_llamacpp.dll", "rac_backend_llamacpp_jni.dll"),
+    "linux-x64" to listOf("librac_commons.so", "librunanywhere_jni.so", "librac_backend_llamacpp.so", "librac_backend_llamacpp_jni.so"),
 )
 
 tasks.register<BuildDesktopNativeRuntimeTask>("buildDesktopNativeRuntime") {
@@ -626,9 +636,9 @@ tasks.register<PrintDesktopNativeRuntimeStatusTask>("printDesktopNativeRuntimeSt
     dependsOn("prepareDesktopNativeRuntime")
     nativeResourceDir.set(layout.projectDirectory.dir("src/jvmMain/resources/runanywhere-native"))
     platformNames.set(desktopNativePlatforms.keys.toList())
-    macOsLibraries.set(listOf("librac_commons.dylib", "librunanywhere_jni.dylib"))
-    windowsLibraries.set(listOf("rac_commons.dll", "runanywhere_jni.dll"))
-    linuxLibraries.set(listOf("librac_commons.so", "librunanywhere_jni.so"))
+    macOsLibraries.set(listOf("librac_commons.dylib", "librunanywhere_jni.dylib", "librac_backend_llamacpp.dylib", "librac_backend_llamacpp_jni.dylib"))
+    windowsLibraries.set(listOf("rac_commons.dll", "runanywhere_jni.dll", "rac_backend_llamacpp.dll", "rac_backend_llamacpp_jni.dll"))
+    linuxLibraries.set(listOf("librac_commons.so", "librunanywhere_jni.so", "librac_backend_llamacpp.so", "librac_backend_llamacpp_jni.so"))
 }
 
 tasks.register<VerifyDesktopNativeRuntimeTask>("verifyDesktopNativeRuntime") {
@@ -637,9 +647,9 @@ tasks.register<VerifyDesktopNativeRuntimeTask>("verifyDesktopNativeRuntime") {
     dependsOn("prepareDesktopNativeRuntime")
     nativeResourceDir.set(layout.projectDirectory.dir("src/jvmMain/resources/runanywhere-native"))
     platformNames.set(desktopNativePlatforms.keys.toList())
-    macOsLibraries.set(listOf("librac_commons.dylib", "librunanywhere_jni.dylib"))
-    windowsLibraries.set(listOf("rac_commons.dll", "runanywhere_jni.dll"))
-    linuxLibraries.set(listOf("librac_commons.so", "librunanywhere_jni.so"))
+    macOsLibraries.set(listOf("librac_commons.dylib", "librunanywhere_jni.dylib", "librac_backend_llamacpp.dylib", "librac_backend_llamacpp_jni.dylib"))
+    windowsLibraries.set(listOf("rac_commons.dll", "runanywhere_jni.dll", "rac_backend_llamacpp.dll", "rac_backend_llamacpp_jni.dll"))
+    linuxLibraries.set(listOf("librac_commons.so", "librunanywhere_jni.so", "librac_backend_llamacpp.so", "librac_backend_llamacpp_jni.so"))
     platformName.set(desktopNativePlatformName)
     verifyAllTargets.set(
         (rootProject.findProperty("runanywhere.verifyAllDesktopNatives") ?: project.findProperty("runanywhere.verifyAllDesktopNatives"))
