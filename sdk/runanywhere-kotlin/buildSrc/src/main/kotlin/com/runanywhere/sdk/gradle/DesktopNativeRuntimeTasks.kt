@@ -102,8 +102,11 @@ abstract class BuildDesktopNativeRuntimeTask @Inject constructor(
     private fun resolveBuiltLibrary(buildDirectory: File, libraryName: String): File {
         val candidates: List<File> = listOf(
             buildDirectory.resolve(libraryName),
+            buildDirectory.resolve("Release").resolve(libraryName),
             buildDirectory.resolve("src/jni").resolve(libraryName),
+            buildDirectory.resolve("src/jni/Release").resolve(libraryName),
             buildDirectory.resolve("src/backends/llamacpp").resolve(libraryName),
+            buildDirectory.resolve("src/backends/llamacpp/Release").resolve(libraryName),
         )
         return candidates.firstOrNull { candidate: File -> candidate.isFile }
             ?: throw GradleException("CMake build did not produce $libraryName in ${candidates.joinToString { it.parentFile.absolutePath }}")
